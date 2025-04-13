@@ -1,0 +1,44 @@
+name: Combine M3U and Clean
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # every 10 minutes
+  workflow_dispatch:        # manual trigger option
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Combine and clean M3U links
+        run: |
+          mkdir temp
+          > output.m3u
+          echo "#EXTM3U" >> output.m3u
+
+          while read -r url; do
+            curl -s "$url" >> temp/combined.m3u
+          done < input_urls.txt
+
+          while read -r line; do
+            if [[ $line == http* ]]; then
+              if curl -s --max-time 10 --head "$line" | grep "200 OK" > /dev/null; then
+                echo "$line" >> output.m3u
+              fi
+            else
+              echo "$line" >> output.m3u
+            fi
+          done < temp/combined.m3u
+
+          rm -rf temp
+
+      - name: Commit changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add output.m3u
+          git commit -m "Auto update output.m3u" || echo "No changes to commit"
+          git push
